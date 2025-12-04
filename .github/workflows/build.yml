@@ -10,24 +10,28 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest]
+
     runs-on: ${{ matrix.os }}
+
     steps:
       - uses: actions/checkout@v4
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '16'  # ← ТОЛЬКО ЭТО ИЗМЕНИЛ
+          node-version: 18
           cache: 'npm'
 
       - name: Install system dependencies (Linux only)
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libgtk-3-0 libnotify4 libnss3 libxss1 libxtst6 xdg-utils libatspi2.0-0 libuuid1 libappindicator3-1 libsecret-1-0
+          sudo apt-get install -y \
+            libgtk-3-0 libnotify4 libnss3 libxss1 libxtst6 \
+            xdg-utils libatspi2.0-0 libuuid1 libappindicator3-1 libsecret-1-0
 
       - name: Install dependencies
-        run: npm ci
+        run: npm install
 
       - name: Build for Linux (AppImage)
         if: runner.os == 'Linux'
