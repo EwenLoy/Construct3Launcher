@@ -17,21 +17,18 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '16'  # ← ТОЛЬКО ЭТО ИЗМЕНИЛ
           cache: 'npm'
 
-      # --- ДЛЯ LINUX ---
       - name: Install system dependencies (Linux only)
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y libgtk-3-0 libnotify4 libnss3 libxss1 libxtst6 xdg-utils libatspi2.0-0 libuuid1 libappindicator3-1 libsecret-1-0
 
-      # --- УСТАНОВКА ЗАВИСИМОСТЕЙ ---
       - name: Install dependencies
         run: npm ci
 
-      # --- СБОРКА ---
       - name: Build for Linux (AppImage)
         if: runner.os == 'Linux'
         run: npx electron-builder --linux AppImage --x64
@@ -40,7 +37,6 @@ jobs:
         if: runner.os == 'Windows'
         run: npx electron-builder --win --x64
 
-      # --- ЗАГРУЗКА АРТЕФАКТОВ ---
       - name: Upload Linux AppImage
         if: runner.os == 'Linux'
         uses: actions/upload-artifact@v4
