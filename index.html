@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Construct 3 Launcher</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+            font-family: Arial, sans-serif; 
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        .container {
+            background: white;
+            padding: 40px;
+            border-radius: 10px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            text-align: center;
+            max-width: 500px;
+            width: 100%;
+        }
+        h1 { 
+            color: #333; 
+            margin-bottom: 30px;
+            font-size: 28px;
+        }
+        .version-btn {
+            display: block;
+            width: 100%;
+            padding: 15px;
+            margin: 10px 0;
+            background: #6200ea;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        .version-btn:hover {
+            background: #3700b3;
+        }
+        .cache-btn {
+            display: block;
+            width: 100%;
+            padding: 12px;
+            margin: 20px 0 10px 0;
+            background: #ff5722;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        .cache-btn:hover {
+            background: #d84315;
+        }
+        .info {
+            margin-top: 20px;
+            color: #666;
+            font-size: 14px;
+        }
+        .status {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 5px;
+            display: none;
+        }
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+            display: block;
+        }
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Construct 3 Launcher</h1>
+        
+        <button class="version-btn" onclick="openVersion('https://editor.construct.net/r458-2', 'Construct 3 Stable')">
+            🚀 Stable r458.2
+        </button>
+        
+        <button class="version-btn" onclick="openVersion('https://editor.construct.net/r449-3', 'Construct 3 LTS')">
+            🔧 LTS r449.3
+        </button>
+        
+        <button class="version-btn" onclick="openVersion('https://editor.construct.net/r424', 'Construct 3 Old Stable')">
+            📦 Archive r424
+        </button>
+        
+        <button class="cache-btn" onclick="clearCache()">
+            🗑️ Clear All Cache
+        </button>
+
+        <div id="statusMessage" class="status"></div>
+        
+        <div class="info">
+            Простой лаунчер Construct 3. Открывает версии в отдельных окнах Electron.
+        </div>
+    </div>
+
+    <script>
+        async function openVersion(url, title) {
+            try {
+                await window.electronAPI.openBrowser(url, title);
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Ошибка открытия: ' + error.message);
+            }
+        }
+
+        async function clearCache() {
+            const button = event.target;
+            const originalText = button.innerHTML;
+            
+            try {
+                button.innerHTML = '🧹 Cleaning...';
+                button.disabled = true;
+
+                const result = await window.electronAPI.clearCache();
+                
+                const statusElement = document.getElementById('statusMessage');
+                if (result.success) {
+                    statusElement.textContent = '✅ ' + result.message;
+                    statusElement.className = 'status success';
+                } else {
+                    statusElement.textContent = '❌ ' + result.message;
+                    statusElement.className = 'status error';
+                }
+                
+                // Автоскрытие через 3 секунды
+                setTimeout(() => {
+                    statusElement.style.display = 'none';
+                }, 3000);
+                
+            } catch (error) {
+                console.error('Error clearing cache:', error);
+                const statusElement = document.getElementById('statusMessage');
+                statusElement.textContent = '❌ Error: ' + error.message;
+                statusElement.className = 'status error';
+            } finally {
+                button.innerHTML = originalText;
+                button.disabled = false;
+            }
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,37 @@
+{
+  "name": "construct3-launcher",
+  "version": "1.0.2",
+  "description": "Simple Construct 3 Launcher",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder"
+  },
+  "devDependencies": {
+    "electron": "21.4.0",
+    "electron-builder": "^24.0.0"
+  },
+  "dependencies": {
+    "electron-squirrel-startup": "^1.0.0"
+  },
+  "build": {
+    "appId": "com.construct3.launcher",
+    "productName": "Construct 3 Launcher",
+    "directories": {
+      "output": "dist"
+    },
+    "win": {
+      "target": "nsis",
+      "arch": ["ia32", "x64"]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    },
+    "linux": {
+      "target": "AppImage",
+      "category": "Development",
+      "icon": "icon.png"
+    }
+  }
+}
