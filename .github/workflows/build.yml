@@ -1,7 +1,7 @@
 name: Build AppImage + Windows
 
 on:
-  workflow_dispatch:  # Запуск вручную
+  workflow_dispatch:
   push:
     branches: [ main ]
 
@@ -20,17 +20,27 @@ jobs:
           node-version: '20'
           cache: 'npm'
 
+      # --- ДЛЯ LINUX ---
+      - name: Install system dependencies (Linux only)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-0 libnotify4 libnss3 libxss1 libxtst6 xdg-utils libatspi2.0-0 libuuid1 libappindicator3-1 libsecret-1-0
+
+      # --- УСТАНОВКА ЗАВИСИМОСТЕЙ ---
       - name: Install dependencies
         run: npm ci
 
+      # --- СБОРКА ---
       - name: Build for Linux (AppImage)
         if: runner.os == 'Linux'
         run: npx electron-builder --linux AppImage --x64
 
       - name: Build for Windows
         if: runner.os == 'Windows'
-        run: npx electron-builder --win nsis --ia32 --x64
+        run: npx electron-builder --win --x64
 
+      # --- ЗАГРУЗКА АРТЕФАКТОВ ---
       - name: Upload Linux AppImage
         if: runner.os == 'Linux'
         uses: actions/upload-artifact@v4
