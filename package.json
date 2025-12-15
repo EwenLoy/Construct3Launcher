@@ -1,7 +1,7 @@
 {
   "name": "construct3-launcher",
-  "version": "1.0.2",
-  "description": "Simple Construct 3 Launcher",
+  "version": "1.0.0-alpha",
+  "description": "Simple Construct 3 Launcher - Alpha",
   "main": "main.js",
   "author": "EwenLoy",
   "scripts": {
@@ -9,28 +9,72 @@
     "dist": "electron-builder"
   },
   "devDependencies": {
-    "electron": "21.4.0",
-    "electron-builder": "^24.13.3"
+    "electron": "^39.2.7",
+    "electron-builder": "^26.0.12"
   },
   "dependencies": {
     "electron-squirrel-startup": "^1.0.0",
-    "extract-zip": "^2.0.1"
+    "extract-zip": "^2.0.1",
+    "express": "^5.2.1",
+    "http-proxy-middleware": "^3.0.5"
   },
   "build": {
     "appId": "com.construct3.launcher",
-    "productName": "Construct 3 Launcher",
+    "productName": "Construct 3 Launcher Alpha",
     "directories": {
-      "output": "dist"
+      "output": "dist",
+      "buildResources": "resources"
     },
-
+    "files": [
+      "main.js",
+      "server.js",
+      "preload.js",
+      "index.html",
+      "package.json",
+      "node_modules/**/*",
+      "icon.png",
+      "icon.ico"
+    ],
+    "asarUnpack": [
+      "server.js",
+      "node_modules/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "resources/certs",
+        "to": "resources/certs"
+      },
+      {
+        "from": "resources/domains",
+        "to": "resources/domains"
+      }
+    ],
     "publish": null,
-
     "win": {
-      "target": "nsis"
+      "target": [
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
     },
     "nsis": {
       "oneClick": false,
-      "allowToChangeInstallationDirectory": true
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Construct 3 Launcher"
+    },
+    "portable": {
+      "artifactName": "${productName}-${version}-portable.exe"
     },
     "linux": {
       "target": "AppImage",

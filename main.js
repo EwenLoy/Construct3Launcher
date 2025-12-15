@@ -1,115 +1,273 @@
-  const { app, BrowserWindow, ipcMain, session } = require('electron');
-  const path = require('path');
+const { app, BrowserWindow, ipcMain, session, protocol, net, Menu } = require('electron');
+const path = require('path');
+const { spawn } = require('child_process');
+const fs = require('fs');
+const url = require('url');
 
-  // Обработчик для electron-builder
+// Отключаем меню приложения полностью
+Menu.setApplicationMenu(null);
+
+// Функция для определения MIME типа файла
+function getMimeType(filePath) {
+  const ext = path.extname(filePath).toLowerCase();
+  const mimeTypes = {
+    '.html': 'text/html',
+    '.js': 'application/javascript',
+    '.css': 'text/css',
+    '.json': 'application/json',
+    '.png': 'image/png',
+    '.jpg': 'image/jpeg',
+    '.jpeg': 'image/jpeg',
+    '.gif': 'image/gif',
+    '.svg': 'image/svg+xml',
+    '.webp': 'image/webp',
+    '.woff': 'font/woff',
+    '.woff2': 'font/woff2',
+    '.ttf': 'font/ttf',
+    '.eot': 'application/vnd.ms-fontobject',
+    '.mp3': 'audio/mpeg',
+    '.mp4': 'video/mp4',
+    '.webm': 'video/webm'
+  };
+  return mimeTypes[ext] || 'application/octet-stream';
+}
+
+// Обработчик Windows installer
+try {
+  if (require('electron-squirrel-startup')) app.quit();
+} catch (_) {}
+
+// Подмена DNS всегда включена (для локального режима)
+app.commandLine.appendSwitch('host-resolver-rules',
+  'MAP editor.construct.net 127.0.0.1:4430,' +
+  'MAP account.construct.net 127.0.0.1:4430,' +
+  'MAP preview.construct.net 127.0.0.1:4430,' +
+  'MAP stats.construct.net 127.0.0.1:4430'
+);
+
+let mainWindow = null;
+let serverProcess = null;
+let serverActive = false;
+
+function createMainWindow() {
+  mainWindow = new BrowserWindow({
+    width: 900,
+    height: 700,
+    show: false,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      nodeIntegration: false,
+      contextIsolation: true
+    },
+    title: 'Construct 3 Launcher'
+  });
+
+  mainWindow.loadFile('index.html');
+
+  mainWindow.webContents.session.setPermissionCheckHandler(() => true);
+  mainWindow.webContents.session.setPermissionRequestHandler((_, __, callback) => callback(true));
+
+  mainWindow.once('ready-to-show', () => mainWindow.show());
+  mainWindow.on('closed', () => (mainWindow = null));
+}
+
+function createBrowserWindow(url, title) {
+  const win = new BrowserWindow({
+    width: 1400,
+    height: 900,
+    title: title || 'Construct 3',
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: false,
+      webSecurity: false,
+      allowRunningInsecureContent: false
+    }
+  });
+
+  win.webContents.session.setPermissionCheckHandler(() => true);
+  win.webContents.session.setPermissionRequestHandler((_, __, callback) => callback(true));
+
+  // Отключаем контекстное меню (правый клик)
+  win.webContents.on('context-menu', (event) => {
+    event.preventDefault();
+  });
+
+  let finalUrl = url;
+
+  if (!serverActive) {
+    // Сервер выключен — открываем официальный онлайн-редактор (правильный URL без 404)
+    finalUrl = 'https://editor.construct.net  ';
+
+    win.webContents.once('did-finish-load', () => {
+      win.webContents.executeJavaScript(`
+        const banner = document.createElement('div');
+        banner.style.cssText = 'position:fixed;top:10px;left:50%;transform:translateX(-50%);background:#ff5722;color:white;padding:15px 30px;border-radius:8px;z-index:999999;font-family:Arial,sans-serif;font-size:16px;box-shadow:0 4px 20px rgba(0,0,0,0.3);text-align:center;';
+        banner.innerHTML = '🔴 Локальный сервер выключен<br>Открыт официальный онлайн-редактор Construct 3 (нужен интернет и аккаунт Scirra)';
+        document.body.appendChild(banner);
+        setTimeout(() => banner.remove(), 12000);
+      `);
+    });
+  }
+
+  win.loadURL(finalUrl);
+}
+
+async function clearAllCache() {
   try {
-    if (require('electron-squirrel-startup')) app.quit();
-  } catch (error) {
-    console.log('electron-squirrel-startup not available in dev mode');
+    await session.defaultSession.clearCache();
+    await session.defaultSession.clearStorageData();
+    console.log('Cache cleared successfully');
+    return true;
+  } catch (err) {
+    console.error('Cache clear error:', err);
+    return false;
+  }
+}
+
+async function startLocalServer() {
+  if (serverProcess) return true;
+
+  let nodeExecutable, serverScriptPath, resourcesPath, appDir;
+  
+  if (app.isPackaged) {
+    // В упакованном приложении с asarUnpack:
+    // process.resourcesPath = C:\...\resources
+    // app.getAppPath() = C:\...\resources\app.asar
+    // server.js находится в: C:\...\resources\app.asar.unpacked\server.js (благодаря asarUnpack)
+    resourcesPath = process.resourcesPath;
+    appDir = path.join(resourcesPath, 'app.asar.unpacked');
+    nodeExecutable = process.execPath;
+    serverScriptPath = path.join(appDir, 'server.js');
+  } else {
+    // В разработке:
+    // __dirname = d:\ar458-2Local-Launcher (корень проекта)
+    // server.js находится в: d:\ar458-2Local-Launcher\server.js
+    resourcesPath = __dirname;
+    appDir = __dirname;
+    nodeExecutable = 'node';
+    serverScriptPath = path.join(__dirname, 'server.js');
   }
 
-  let mainWindow;
+  console.log(`[Main] app.isPackaged: ${app.isPackaged}`);
+  console.log(`[Main] process.resourcesPath: ${process.resourcesPath}`);
+  console.log(`[Main] app.getAppPath(): ${app.getAppPath()}`);
+  console.log(`[Main] Starting server from: ${serverScriptPath}`);
+  console.log(`[Main] Server script exists: ${fs.existsSync(serverScriptPath)}`);
+  console.log(`[Main] Resources path for server: ${resourcesPath}`);
 
-  function createMainWindow() {
-    mainWindow = new BrowserWindow({
-      width: 900,
-      height: 700,
-      show: false,
-      webPreferences: {
-        preload: path.join(__dirname, 'preload.js'),
-        nodeIntegration: false,
-        contextIsolation: true
-      },
-      title: 'Construct 3 Launcher'
-    });
+  // Передаем переменную окружения с путем к ресурсам
+  serverProcess = spawn(nodeExecutable, [serverScriptPath], {
+    stdio: 'pipe',
+    cwd: resourcesPath,
+    env: { 
+      ...process.env,
+      ELECTRON_RUN_AS_NODE: app.isPackaged ? '1' : undefined,
+      RESOURCES_PATH: resourcesPath,
+      IS_PACKAGED: app.isPackaged ? '1' : '0'
+    },
+    detached: false,
+    windowsHide: true
+  });
 
-    mainWindow.loadFile('index.html');
-    
-    // Разрешаем доступ к файловой системе для главного окна
-    mainWindow.webContents.session.setPermissionCheckHandler((webContents, permission, requestingOrigin, details) => {
-      return true;
-    });
-    
-    // Разрешаем запросы разрешений
-    mainWindow.webContents.session.setPermissionRequestHandler((webContents, permission, callback) => {
-      callback(true);
-    });
-    
-    mainWindow.once('ready-to-show', () => {
-      mainWindow.show();
-    });
+  serverProcess.stderr.on('data', data => {
+    const msg = data.toString();
+    console.error(`[Server ERR] ${msg}`);
+    mainWindow?.webContents.send('server-error', msg);
+  });
 
-    mainWindow.on('closed', () => {
-      mainWindow = null;
-    });
-  }
+  return new Promise(resolve => {
+    let resolved = false;
+    const timeout = setTimeout(() => {
+      if (!resolved) { 
+        resolved = true;
+        console.error('[Main] Server startup timeout (30s)');
+        resolve(false);
+      }
+    }, 30000);
 
-  // Функция для создания окна браузера
-  function createBrowserWindow(url, title) {
-    const browserWindow = new BrowserWindow({
-      width: 1400,
-      height: 900,
-      title: title,
-      webPreferences: {
-        nodeIntegration: false,
-        contextIsolation: false,
-        webSecurity: false,
-        allowRunningInsecureContent: true
+    serverProcess.stdout.on('data', data => {
+      const out = data.toString();
+      process.stdout.write(out);
+
+      if (out.includes('HTTPS server running')) {
+        if (!resolved) {
+          resolved = true;
+          clearTimeout(timeout);
+          serverActive = true;
+          console.log('[Main] Server started successfully');
+          mainWindow?.webContents.send('server-status', { active: true, message: 'Server running' });
+          resolve(true);
+        }
       }
     });
 
-    // Разрешаем доступ к файловой системе
-    browserWindow.webContents.session.setPermissionCheckHandler((webContents, permission, requestingOrigin, details) => {
-      return true;
+    serverProcess.on('error', (err) => {
+      if (!resolved) {
+        resolved = true;
+        clearTimeout(timeout);
+        console.error('[Main] Server process error:', err.message);
+        mainWindow?.webContents.send('server-error', err.message);
+        resolve(false);
+      }
     });
 
-    // Все ссылки открываем в этом же окне
-    browserWindow.webContents.setWindowOpenHandler(() => {
-      return { action: 'allow' };
+    serverProcess.on('exit', (code, signal) => {
+      if (!resolved) {
+        resolved = true;
+        clearTimeout(timeout);
+        console.log(`[Main] Server exited with code ${code}, signal ${signal}`);
+        resolve(false);
+      }
+      serverActive = false;
+      mainWindow?.webContents.send('server-status', { active: false, message: 'Server stopped' });
+      serverProcess = null;
     });
+  });
+}
 
-    // Разрешаем всё что можно
-    browserWindow.webContents.session.setPermissionRequestHandler((webContents, permission, callback) => {
-      callback(true);
-    });
-
-    browserWindow.loadURL(url);
-    
-    return browserWindow;
+function stopLocalServer() {
+  if (serverProcess) {
+    serverProcess.kill('SIGTERM');
   }
+  serverActive = false;
+  mainWindow?.webContents.send('server-status', false);
+}
 
-  // Функция для очистки кэша
-  async function clearAllCache() {
-    try {
-      const ses = session.defaultSession;
-      await ses.clearCache();
-      await ses.clearStorageData();
-      console.log('Cache cleared successfully');
-      return true;
-    } catch (error) {
-      console.error('Error clearing cache:', error);
-      return false;
+app.whenReady().then(async () => {
+  // Регистрируем обработчики IPC до создания окна
+  ipcMain.handle('open-browser', async (_, { url, title }) => {
+    createBrowserWindow(url, title);
+    return { success: true };
+  });
+
+  ipcMain.handle('clear-cache', async () => {
+    const success = await clearAllCache();
+    return { success, message: success ? 'Cache cleared successfully' : 'Failed to clear cache' };
+  });
+
+  ipcMain.handle('toggle-server', async (_, enable) => {
+    if (enable && !serverActive) {
+      return { success: await startLocalServer() };
     }
-  }
-
-  app.whenReady().then(() => {
-    createMainWindow();
-
-    ipcMain.handle('open-browser', async (event, { url, title }) => {
-      createBrowserWindow(url, title);
+    if (!enable && serverActive) {
+      stopLocalServer();
       return { success: true };
-    });
-
-    ipcMain.handle('clear-cache', async (event) => {
-      const success = await clearAllCache();
-      return { success: success, message: success ? 'Cache cleared successfully' : 'Failed to clear cache' };
-    });
+    }
+    return { success: true };
   });
 
-  app.on('window-all-closed', () => {
-    if (process.platform !== 'darwin') app.quit();
-  });
+  ipcMain.handle('get-server-status', () => serverActive);
 
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createMainWindow();
-  });
+  createMainWindow();
+  await startLocalServer();
+});
+
+app.on('before-quit', () => stopLocalServer());
+
+app.on('window-all-closed', () => {
+  if (process.platform !== 'darwin') app.quit();
+});
+
+app.on('activate', () => {
+  if (BrowserWindow.getAllWindows().length === 0) createMainWindow();
+});

@@ -23,68 +23,54 @@
             max-width: 500px;
             width: 100%;
         }
-        h1 { 
-            color: #333; 
-            margin-bottom: 30px;
-            font-size: 28px;
-        }
+        h1 { color: #333; margin-bottom: 30px; font-size: 28px; }
         .version-btn {
-            display: block;
-            width: 100%;
-            padding: 15px;
-            margin: 10px 0;
-            background: #6200ea;
-            color: white;
-            border: none;
-            border-radius: 5px;
-            font-size: 16px;
-            cursor: pointer;
-            transition: background 0.3s;
+            display: block; width: 100%; padding: 15px; margin: 10px 0;
+            background: #6200ea; color: white; border: none; border-radius: 5px;
+            font-size: 16px; cursor: pointer; transition: background 0.3s;
         }
-        .version-btn:hover {
-            background: #3700b3;
-        }
+        .version-btn:hover { background: #3700b3; }
         .cache-btn {
-            display: block;
-            width: 100%;
-            padding: 12px;
-            margin: 20px 0 10px 0;
-            background: #ff5722;
-            color: white;
-            border: none;
-            border-radius: 5px;
-            font-size: 14px;
-            cursor: pointer;
-            transition: background 0.3s;
+            display: block; width: 100%; padding: 12px; margin: 20px 0 10px 0;
+            background: #ff5722; color: white; border: none; border-radius: 5px;
+            font-size: 14px; cursor: pointer; transition: background 0.3s;
         }
-        .cache-btn:hover {
-            background: #d84315;
+        .cache-btn:hover { background: #d84315; }
+
+        .server-control {
+            display: flex; align-items: center; justify-content: center;
+            margin: 20px 0; gap: 12px; font-size: 15px;
         }
-        .info {
-            margin-top: 20px;
-            color: #666;
-            font-size: 14px;
+        .switch { position: relative; display: inline-block; width: 60px; height: 34px; }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider {
+            position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0;
+            background-color: #ccc; transition: .4s; border-radius: 34px;
         }
-        .status {
-            margin: 10px 0;
-            padding: 10px;
-            border-radius: 5px;
-            display: none;
+        .slider:before {
+            position: absolute; content: ""; height: 26px; width: 26px;
+            left: 4px; bottom: 4px; background-color: white; transition: .4s;
+            border-radius: 50%;
         }
-        .status.success {
-            background: #d4edda;
-            color: #155724;
-            display: block;
-        }
-        .status.error {
-            background: #f8d7da;
-            color: #721c24;
-            display: block;
-        }
+        input:checked + .slider { background-color: #4caf50; }
+        input:checked + .slider:before { transform: translateX(26px); }
+
+        .server-status { font-weight: bold; min-width: 80px; }
+        .status-active { color: #4caf50; }
+        .status-inactive { color: #f44336; }
+
+        .info { margin-top: 20px; color: #666; font-size: 14px; }
+        .status { margin: 10px 0; padding: 10px; border-radius: 5px; display: none; }
+        .status.success { background: #d4edda; color: #155724; display: block; }
+        .status.error, .status.info { background: #d1ecf1; color: #0c5460; display: block; }
     </style>
 </head>
 <body>
     <div class="container">
+        <div style="display: flex; align-items: center; justify-content: center; margin-bottom: 20px;">
+            <img src="icon.png" alt="Icon" style="width: 32px; height: 32px; margin-right: 10px; border-radius: 8px;">
+            <span style="font-size: 18px; font-weight: bold; color: #333;">SilanHack</span>
+        </div>
         <h1>Construct 3 Launcher</h1>
         
         <button class="version-btn" onclick="openVersion('https://editor.construct.net/r458-2', 'Construct 3 Stable')">
@@ -98,7 +84,16 @@
         <button class="version-btn" onclick="openVersion('https://editor.construct.net/r424', 'Construct 3 Old Stable')">
             📦 Archive r424
         </button>
-        
+
+        <div class="server-control">
+            <span>Local Server:</span>
+            <label class="switch">
+                <input type="checkbox" id="serverToggle">
+                <span class="slider"></span>
+            </label>
+            <span class="server-status status-active" id="serverStatus">Active</span>
+        </div>
+
         <button class="cache-btn" onclick="clearCache()">
             🗑️ Clear All Cache
         </button>
@@ -106,54 +101,70 @@
         <div id="statusMessage" class="status"></div>
         
         <div class="info">
-            Простой лаунчер Construct 3. Открывает версии в отдельных окнах Electron.
+            <a href="https://t.me/silanhack" target="_blank" style="color: #666; text-decoration: none; font-size: 14px;">t.me/silanhack</a>
         </div>
     </div>
 
     <script>
-        async function openVersion(url, title) {
-            try {
-                await window.electronAPI.openBrowser(url, title);
-            } catch (error) {
-                console.error('Error:', error);
-                alert('Ошибка открытия: ' + error.message);
+        const toggle = document.getElementById('serverToggle');
+        const statusEl = document.getElementById('serverStatus');
+        const msg = document.getElementById('statusMessage');
+
+        async function init() {
+            const active = await window.electronAPI.getServerStatus();
+            toggle.checked = active;
+            updateDisplay(active);
+        }
+
+        function updateDisplay(active) {
+            statusEl.textContent = active ? 'Active' : 'Inactive';
+            statusEl.className = 'server-status ' + (active ? 'status-active' : 'status-inactive');
+        }
+
+        window.electronAPI.onServerStatus(active => {
+            toggle.checked = active;
+            updateDisplay(active);
+        });
+
+        toggle.addEventListener('change', async () => {
+            const enable = toggle.checked;
+            const { success } = await window.electronAPI.toggleServer(enable);
+
+            if (success) {
+                msg.textContent = enable
+                    ? '🔄 Starting local server (offline/hybrid mode)...'
+                    : '⏹️ Local server stopped — using original Scirra servers.';
+                msg.className = 'status info';
+            } else {
+                toggle.checked = !enable;
+                msg.textContent = '❌ Failed to change server state.';
+                msg.className = 'status error';
             }
+            msg.style.display = 'block';
+            setTimeout(() => msg.style.display = 'none', 5000);
+        });
+
+        async function openVersion(url, title) {
+            await window.electronAPI.openBrowser(url, title);
         }
 
         async function clearCache() {
-            const button = event.target;
-            const originalText = button.innerHTML;
-            
-            try {
-                button.innerHTML = '🧹 Cleaning...';
-                button.disabled = true;
+            const btn = event.target;
+            const text = btn.innerHTML;
+            btn.innerHTML = '🧹 Cleaning...';
+            btn.disabled = true;
 
-                const result = await window.electronAPI.clearCache();
-                
-                const statusElement = document.getElementById('statusMessage');
-                if (result.success) {
-                    statusElement.textContent = '✅ ' + result.message;
-                    statusElement.className = 'status success';
-                } else {
-                    statusElement.textContent = '❌ ' + result.message;
-                    statusElement.className = 'status error';
-                }
-                
-                // Автоскрытие через 3 секунды
-                setTimeout(() => {
-                    statusElement.style.display = 'none';
-                }, 3000);
-                
-            } catch (error) {
-                console.error('Error clearing cache:', error);
-                const statusElement = document.getElementById('statusMessage');
-                statusElement.textContent = '❌ Error: ' + error.message;
-                statusElement.className = 'status error';
-            } finally {
-                button.innerHTML = originalText;
-                button.disabled = false;
-            }
+            const res = await window.electronAPI.clearCache();
+            msg.textContent = res.success ? '✅ ' + res.message : '❌ ' + res.message;
+            msg.className = 'status ' + (res.success ? 'success' : 'error');
+            msg.style.display = 'block';
+            setTimeout(() => msg.style.display = 'none', 3000);
+
+            btn.innerHTML = text;
+            btn.disabled = false;
         }
+
+        init();
     </script>
 </body>
 </html>

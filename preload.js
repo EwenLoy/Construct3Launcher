@@ -1,36 +1,27 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
-// Предоставляем безопасные API для рендерера
 contextBridge.exposeInMainWorld('electronAPI', {
-  // Открыть браузер с Construct 3
-  openBrowser: (url, title) => {
-    return ipcRenderer.invoke('open-browser', { url, title });
+  openBrowser: (url, title) => ipcRenderer.invoke('open-browser', { url, title }),
+  clearCache: () => ipcRenderer.invoke('clear-cache'),
+  toggleServer: (enable) => ipcRenderer.invoke('toggle-server', enable),
+  getServerStatus: () => ipcRenderer.invoke('get-server-status'),
+  onServerStatus: (callback) => {
+    const listener = (_, status) => {
+      if (typeof status === 'object') {
+        callback(status.active);
+      } else {
+        callback(status);
+      }
+    };
+    ipcRenderer.on('server-status', listener);
+    return () => ipcRenderer.removeListener('server-status', listener);
   },
-  
-  // Очистить кэш
-  clearCache: () => {
-    return ipcRenderer.invoke('clear-cache');
+  onServerError: (callback) => {
+    const listener = (_, error) => callback(error);
+    ipcRenderer.on('server-error', listener);
+    return () => ipcRenderer.removeListener('server-error', listener);
   },
-  
-  // Получить информацию о приложении
-  getAppInfo: () => {
-    return ipcRenderer.invoke('get-app-info');
-  },
-  
-  // Слушатели событий (для будущего использования)
-  onWindowFocus: (callback) => {
-    ipcRenderer.on('window-focus', callback);
-  },
-  
-  onWindowBlur: (callback) => {
-    ipcRenderer.on('window-blur', callback);
-  },
-  
-  // Удалить слушатели
-  removeAllListeners: (channel) => {
-    ipcRenderer.removeAllListeners(channel);
-  }
+  removeAllListeners: (channel) => ipcRenderer.removeAllListeners(channel)
 });
 
-// Логирование для отладки
-console.log('Preload script loaded successfully');  
+console.log('[Preload] Script loaded successfully');
