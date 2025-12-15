@@ -10,12 +10,13 @@
   },
   "devDependencies": {
     "electron": "^39.2.7",
-    "electron-builder": "^26.0.12"
+    "electron-builder": "^26.0.12",
+    "javascript-obfuscator": "^5.1.0"
   },
   "dependencies": {
     "electron-squirrel-startup": "^1.0.0",
-    "extract-zip": "^2.0.1",
     "express": "^5.2.1",
+    "extract-zip": "^2.0.1",
     "http-proxy-middleware": "^3.0.5"
   },
   "build": {
@@ -74,7 +75,8 @@
       "shortcutName": "Construct 3 Launcher"
     },
     "portable": {
-      "artifactName": "${productName}-${version}-portable.exe"
+      "artifactName": "${productName}-${version}-portable.exe",
+      "unpackDirName": "Construct3LauncherAlpha"
     },
     "linux": {
       "target": "AppImage",
